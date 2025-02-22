@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Product Validation</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center">Real-Time Product Validation Dashboard</h2>
+
+        <!-- Live Product Validation Score -->
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">Overall Validation Score</div>
+                    <div class="card-body text-center">
+                        <h3 class="text-primary" id="validation-score">Loading...</h3>
+                        <p class="text-muted">Last updated: <span id="timestamp">--:--</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Product Quality Chart -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">Product Quality Analysis</div>
+                    <div class="card-body">
+                        <canvas id="qualityChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Product Validation Table -->
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">Product Validation Results</div>
+                    <div class="card-body">
+                        <table class="table table-striped" id="product-table">
+                            <thead>
+                                <tr>
+                                    <th>Product ID</th>
+                                    <th>Name</th>
+                                    <th>Defects</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Data will be inserted dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+    document.addEventListener("DOMContentLoaded", function () {
+        updateDashboard();
+        setInterval(updateDashboard, 5000); // Refresh every 5 seconds
+    });
+
+    let qualityChart; // Global variable for the chart instance
+
+    // Fetch live product validation data from Node.js server
+    async function updateDashboard() {
+        try {
+            const response = await fetch("http://localhost:3000/api/product-validation");
+            if (!response.ok) throw new Error("Failed to fetch data");
+
+            const data = await response.json();
+
+            // Update validation score and timestamp
+            document.getElementById("validation-score").innerText = `${data.validationScore}%`;
+            document.getElementById("timestamp").innerText = data.timestamp;
+
+            // Update product validation table
+            const tableBody = document.querySelector("#product-table tbody");
+            tableBody.innerHTML = ""; // Clear previous data
+
+            data.products.forEach((product) => {
+                const row = `
+                    <tr>
+                        <td>${product.id}</td>
+                        <td>${product.name}</td>
+                        <td>${product.defects}</td>
+                        <td class="${getStatusClass(product.status)}">${product.status}</td>
+                    </tr>
+                `;
+                tableBody.insertAdjacentHTML("beforeend", row);
+            });
+
+            // Update Product Quality Chart with percentages
+            updateQualityChart(data.products);
+        } catch (error) {
+            console.error("Error fetching data:", error);
+            document.getElementById("validation-score").innerText = "Error";
+            document.getElementById("timestamp").innerText = "--:--";
+        }
+    }
+
+    // Get status class for styling
+    function getStatusClass(status) {
+        if (status === "Pass") return "text-success";
+        if (status === "Warning") return "text-warning";
+        return "text-danger";
+    }
+
+    // Update Product Quality Chart with percentages
+    function updateQualityChart(products) {
+        const totalProducts = products.length;
+        const passCount = products.filter(p => p.status === "Pass").length;
+        const warningCount = products.filter(p => p.status === "Warning").length;
+        const failCount = products.filter(p => p.status === "Fail").length;
+
+        // Calculate percentages
+        const passPercentage = ((passCount / totalProducts) * 100).toFixed(1);
+        const warningPercentage = ((warningCount / totalProducts) * 100).toFixed(1);
+        const failPercentage = ((failCount / totalProducts) * 100).toFixed(1);
+
+        const ctx = document.getElementById("qualityChart").getContext("2d");
+
+        if (qualityChart) {
+            // Update existing chart
+            qualityChart.data.datasets[0].data = [passPercentage, warningPercentage, failPercentage];
+            qualityChart.data.labels = [
+                `Pass (${passPercentage}%)`,
+                `Warning (${warningPercentage}%)`,
+                `Fail (${failPercentage}%)`
+            ];
+            qualityChart.update();
+        } else {
+            // Create new chart if it doesn't exist
+            qualityChart = new Chart(ctx, {
+                type: "doughnut",
+                data: {
+                    labels: [
+                        `Pass (${passPercentage}%)`,
+                        `Warning (${warningPercentage}%)`,
+                        `Fail (${failPercentage}%)`
+                    ],
+                    datasets: [{
+                        data: [passPercentage, warningPercentage, failPercentage],
+                        backgroundColor: ["#28a745", "#ffc107", "#dc3545"]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: "bottom" },
+                        tooltip: {
+                            callbacks: {
+                                label: function (tooltipItem) {
+                                    return `${tooltipItem.label}: ${tooltipItem.raw}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+    </script>
+</body>
+</html>
